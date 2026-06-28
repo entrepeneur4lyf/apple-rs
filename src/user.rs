@@ -61,7 +61,7 @@ pub fn get_user_info_from_id_token(id_token: &str) -> Result<AppleUser, AppleErr
     Ok(user)
 }
 
-fn parse_bool(value: &Option<serde_json::Value>) -> bool {
+pub fn parse_bool(value: &Option<serde_json::Value>) -> bool {
     match value {
         Some(serde_json::Value::Bool(b)) => *b,
         Some(serde_json::Value::String(s)) => s == "true",
@@ -71,19 +71,19 @@ fn parse_bool(value: &Option<serde_json::Value>) -> bool {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    iss: Option<String>,
-    aud: Option<String>,
-    sub: Option<String>,
-    iat: Option<i64>,
-    exp: Option<i64>,
-    nonce: Option<String>,
-    email: Option<String>,
-    email_verified: Option<serde_json::Value>,
-    is_private_email: Option<serde_json::Value>,
-    real_user_status: Option<f64>,
-    auth_time: Option<i64>,
-    nonce_supported: Option<bool>,
-    transfer_sub: Option<String>,
-    org_id: Option<String>,
+pub struct Claims {
+    pub iss: Option<String>,
+    pub aud: Option<String>,
+    pub sub: Option<String>,
+    pub iat: Option<i64>,
+    pub exp: Option<i64>,
+    pub nonce: Option<String>,
+    pub email: Option<String>,
+    pub email_verified: Option<serde_json::Value>,
+    pub is_private_email: Option<serde_json::Value>,
+    pub real_user_status: Option<f64>,
+    pub auth_time: Option<i64>,
+    pub nonce_supported: Option<bool>,
+    pub transfer_sub: Option<String>,
+    pub org_id: Option<String>,
 }

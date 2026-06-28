@@ -6,6 +6,8 @@ pub mod signing;
 #[cfg(feature = "auth")]
 pub mod auth;
 #[cfg(feature = "auth")]
+pub mod jwks;
+#[cfg(feature = "auth")]
 pub mod url;
 #[cfg(feature = "auth")]
 pub mod user;
