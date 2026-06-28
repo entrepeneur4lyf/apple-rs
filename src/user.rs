@@ -1,7 +1,8 @@
 use crate::error::AppleError;
-use jsonwebtoken::{Validation, decode};
+use jsonwebtoken::{decode, Validation};
 use serde::{Deserialize, Serialize};
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum RealUserStatus {
     Unsupported = 0,

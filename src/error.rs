@@ -1,25 +1,32 @@
 use std::fmt;
 
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum AppleError {
-    IoError(String),
+    HttpError(String),
+    JsonError(String),
+    JwtError(String),
     Base64Error(String),
     PemError(String),
     KeyParseError(String),
-    JwtError(String),
-    HttpError(String),
-    JsonError(String),
+    IoError(String),
     TimeError(String),
     UnrecognizedError(String),
     ResponseError(ErrorResponse),
     #[cfg(feature = "cloudkit")]
     CloudKitError(CloudKitErrorResponse),
-    #[cfg(feature = "cloudkit")]
-    SignatureError(String),
     #[cfg(feature = "appstore")]
     AppStoreError(AppStoreErrorResponse),
     #[cfg(feature = "appstore")]
     CertificateError(String),
+    // S1: ID token verification failures
+    TokenValidationError(String),
+    // S4: CSRF state mismatch
+    StateMismatchError,
+    // S3: JWS without certificate chain
+    MissingCertificateChain,
+    // S1: JWKS fetching/parsing failures
+    JwksError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -27,7 +34,7 @@ pub struct ErrorResponse {
     pub error_type: ErrorResponseType,
     pub message: &'static str,
 }
-
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorResponseType {
     InvalidRequest,
@@ -208,6 +215,12 @@ impl fmt::Display for AppleError {
             AppleError::AppStoreError(err) => write!(f, "{}", err),
             #[cfg(feature = "appstore")]
             AppleError::CertificateError(msg) => write!(f, "Certificate error: {}", msg),
+            AppleError::TokenValidationError(msg) => write!(f, "Token validation error: {msg}"),
+            AppleError::StateMismatchError => write!(f, "CSRF state mismatch"),
+            AppleError::MissingCertificateChain => {
+                write!(f, "JWS missing certificate chain (x5c empty)")
+            }
+            AppleError::JwksError(msg) => write!(f, "JWKS error: {msg}"),
         }
     }
 }

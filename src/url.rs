@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use url::Url;
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum ResponseMode {
     Query,
@@ -20,6 +21,7 @@ impl fmt::Display for ResponseMode {
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum ResponseType {
     Code,
