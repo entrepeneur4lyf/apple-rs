@@ -1,5 +1,4 @@
 use crate::error::AppleError;
-use jsonwebtoken::{decode, Validation};
 use serde::{Deserialize, Serialize};
 
 #[non_exhaustive]
@@ -28,15 +27,29 @@ pub struct AppleUser {
     pub org_id: Option<String>,
 }
 
-pub fn get_user_info_from_id_token(id_token: &str) -> Result<AppleUser, AppleError> {
-    let token = decode::<Claims>(
-        id_token,
-        &jsonwebtoken::DecodingKey::from_secret(&[]), // No validation for simplicity
-        &Validation::new(jsonwebtoken::Algorithm::ES256),
-    )
-    .map_err(|e| AppleError::JwtError(e.to_string()))?;
+/// Verify an Apple ID token and extract user information.
+///
+/// # Security
+/// This function verifies the JWT signature using Apple's public keys
+/// (fetched from the JWKS endpoint), validates the issuer, audience,
+/// expiry, and nonce. It will NEVER decode a JWT without signature
+/// verification.
+///
+/// # Arguments
+/// * `id_token` - The ID token from Apple's token response
+/// * `client_id` - The expected audience (your app's bundle ID / service ID)
+/// * `expected_nonce` - The nonce sent in the authorization request, if any
+/// * `jwks_client` - The JWKS client for fetching Apple's public keys
+pub async fn get_user_info_from_id_token(
+    id_token: &str,
+    client_id: &str,
+    expected_nonce: Option<&str>,
+    jwks_client: &crate::jwks::AppleJwksClient,
+) -> Result<AppleUser, AppleError> {
+    let claims = jwks_client
+        .verify_token(id_token, client_id, expected_nonce)
+        .await?;
 
-    let claims = token.claims;
     let user = AppleUser {
         issuer: claims.iss,
         audience: claims.aud,
