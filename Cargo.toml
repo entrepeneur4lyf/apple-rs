@@ -32,3 +32,4 @@ x509-cert = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+rcgen = "0.13"

@@ -1,9 +1,9 @@
-use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
-use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
+use base64::Engine;
+use p256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use x509_cert::der::{Decode, Encode};
 use x509_cert::Certificate;
-use x509_cert::der::Decode;
 
 use crate::error::AppleError;
 
@@ -275,61 +275,61 @@ impl SignedDataVerifier {
         let header: JWSHeader = serde_json::from_slice(&header_bytes)
             .map_err(|e| AppleError::JsonError(e.to_string()))?;
 
-        if !header.x5c.is_empty() {
-            self.verify_certificate_chain(&header.x5c)?;
+        if header.x5c.is_empty() {
+            return Err(AppleError::MissingCertificateChain);
         }
+        self.verify_certificate_chain(&header.x5c)?;
 
         let payload_bytes = URL_SAFE_NO_PAD
             .decode(parts[1])
             .map_err(|e| AppleError::Base64Error(e.to_string()))?;
 
-        if !header.x5c.is_empty() {
-            let leaf_cert_bytes = STANDARD
-                .decode(&header.x5c[0])
-                .map_err(|e| AppleError::Base64Error(e.to_string()))?;
+        // Verify JWS signature using leaf cert's public key
+        let leaf_cert_bytes = STANDARD
+            .decode(&header.x5c[0])
+            .map_err(|e| AppleError::Base64Error(e.to_string()))?;
 
-            let cert = Certificate::from_der(&leaf_cert_bytes)
-                .map_err(|e| AppleError::CertificateError(e.to_string()))?;
+        let cert = Certificate::from_der(&leaf_cert_bytes)
+            .map_err(|e| AppleError::CertificateError(e.to_string()))?;
 
-            let public_key_bytes = cert
-                .tbs_certificate
-                .subject_public_key_info
-                .subject_public_key
-                .raw_bytes();
+        let public_key_bytes = cert
+            .tbs_certificate
+            .subject_public_key_info
+            .subject_public_key
+            .raw_bytes();
 
-            let verifying_key = VerifyingKey::from_sec1_bytes(public_key_bytes)
-                .map_err(|e| AppleError::CertificateError(e.to_string()))?;
+        let verifying_key = VerifyingKey::from_sec1_bytes(public_key_bytes)
+            .map_err(|e| AppleError::CertificateError(e.to_string()))?;
 
-            let signature_bytes = URL_SAFE_NO_PAD
-                .decode(parts[2])
-                .map_err(|e| AppleError::Base64Error(e.to_string()))?;
+        let signature_bytes = URL_SAFE_NO_PAD
+            .decode(parts[2])
+            .map_err(|e| AppleError::Base64Error(e.to_string()))?;
 
-            let signature = Signature::from_der(&signature_bytes)
-                .map_err(|e| AppleError::CertificateError(e.to_string()))?;
+        let signature = Signature::from_der(&signature_bytes)
+            .map_err(|e| AppleError::CertificateError(e.to_string()))?;
 
-            let signed_content = format!("{}.{}", parts[0], parts[1]);
-            verifying_key
-                .verify(signed_content.as_bytes(), &signature)
-                .map_err(|e| AppleError::CertificateError(e.to_string()))?;
-        }
+        let signed_content = format!("{}.{}", parts[0], parts[1]);
+        verifying_key
+            .verify(signed_content.as_bytes(), &signature)
+            .map_err(|e| AppleError::CertificateError(e.to_string()))?;
 
         serde_json::from_slice(&payload_bytes).map_err(|e| AppleError::JsonError(e.to_string()))
     }
 
     fn verify_certificate_chain(&self, x5c_chain: &[String]) -> Result<(), AppleError> {
-        if x5c_chain.is_empty() {
+        if x5c_chain.len() < 2 {
             return Err(AppleError::CertificateError(
-                "Empty certificate chain".to_string(),
+                "Certificate chain must have at least 2 certificates (leaf + issuer)".to_string(),
             ));
         }
 
-        // Verify chain from leaf to root
+        // Verify each cert's signature using the next cert's public key
         for i in 0..x5c_chain.len() - 1 {
             let cert_bytes = STANDARD
                 .decode(&x5c_chain[i])
                 .map_err(|e| AppleError::Base64Error(e.to_string()))?;
 
-            let _cert = Certificate::from_der(&cert_bytes)
+            let cert = Certificate::from_der(&cert_bytes)
                 .map_err(|e| AppleError::CertificateError(e.to_string()))?;
 
             let issuer_bytes = STANDARD
@@ -345,8 +345,30 @@ impl SignedDataVerifier {
                 .subject_public_key
                 .raw_bytes();
 
-            let _issuer_verifying_key = VerifyingKey::from_sec1_bytes(issuer_public_key_bytes)
+            let issuer_verifying_key = VerifyingKey::from_sec1_bytes(issuer_public_key_bytes)
                 .map_err(|e| AppleError::CertificateError(e.to_string()))?;
+
+            // Extract the cert's signature and verify it with the issuer's key
+            let cert_signature = cert.signature.as_bytes().ok_or_else(|| {
+                AppleError::CertificateError("certificate has no signature".into())
+            })?;
+
+            let signature = Signature::from_der(cert_signature).map_err(|e| {
+                AppleError::CertificateError(format!("invalid cert signature format: {e}"))
+            })?;
+
+            // Verify: issuer's key signs this cert's tbsCertificate
+            let tbs_bytes = cert.tbs_certificate.to_der().map_err(|e| {
+                AppleError::CertificateError(format!("failed to encode tbsCertificate: {e}"))
+            })?;
+
+            issuer_verifying_key
+                .verify(&tbs_bytes, &signature)
+                .map_err(|e| {
+                    AppleError::CertificateError(format!(
+                        "certificate signature verification failed at position {i}: {e}"
+                    ))
+                })?;
         }
 
         // Verify root certificate against trusted roots
