@@ -5,11 +5,18 @@ use jsonwebtoken::{EncodingKey, Header, encode};
 use p256::pkcs8::EncodePrivateKey;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const VALIDATION_ENDPOINT: &str = "https://appleid.apple.com/auth/token";
 const APPLE_AUDIENCE: &str = "https://appleid.apple.com";
+
+const CLIENT_SECRET_MAX_EXPIRY_SECS: i64 = 15776999; // ~6 months
+
+struct CachedJwt {
+    token: String,
+    expires_at: i64,
+}
 
 #[derive(Serialize, Deserialize)]
 struct AppleErrorResponseBody {
@@ -37,6 +44,7 @@ pub struct AppleAuthImpl {
     team_id: String,
     key_pair: Arc<AppleKeyPair>,
     http_client: Client,
+    client_secret_cache: Mutex<Option<CachedJwt>>,
 }
 
 impl AppleAuthImpl {
@@ -56,6 +64,7 @@ impl AppleAuthImpl {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| AppleError::HttpError(e.to_string()))?,
+            client_secret_cache: Mutex::new(None),
         })
     }
 
@@ -75,6 +84,7 @@ impl AppleAuthImpl {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| AppleError::HttpError(e.to_string()))?,
+            client_secret_cache: Mutex::new(None),
         })
     }
 
@@ -92,6 +102,7 @@ impl AppleAuthImpl {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| AppleError::HttpError(e.to_string()))?,
+            client_secret_cache: Mutex::new(None),
         })
     }
 
@@ -103,14 +114,23 @@ impl AppleAuthImpl {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|e| AppleError::TimeError(e.to_string()))?
-            .as_secs();
+            .as_secs() as i64;
+
+        // Check cache — regenerate if within 1 hour of expiry
+        if let Ok(cache) = self.client_secret_cache.lock() {
+            if let Some(cached) = cache.as_ref() {
+                if cached.expires_at > now + 3600 {
+                    return Ok(cached.token.clone());
+                }
+            }
+        }
 
         let claims = Claims {
             iss: self.team_id.clone(),
             sub: self.app_id.clone(),
             aud: APPLE_AUDIENCE.to_string(),
-            iat: now as i64,
-            exp: now as i64 + 15776999, // ~6 months
+            iat: now,
+            exp: now + CLIENT_SECRET_MAX_EXPIRY_SECS,
         };
 
         let mut header = Header::new(jsonwebtoken::Algorithm::ES256);
@@ -124,6 +144,14 @@ impl AppleAuthImpl {
 
         let token = encode(&header, &claims, &EncodingKey::from_ec_der(der.as_bytes()))
             .map_err(|e| AppleError::JwtError(e.to_string()))?;
+
+        // Cache it
+        if let Ok(mut cache) = self.client_secret_cache.lock() {
+            *cache = Some(CachedJwt {
+                token: token.clone(),
+                expires_at: now + CLIENT_SECRET_MAX_EXPIRY_SECS,
+            });
+        }
 
         Ok(token)
     }
