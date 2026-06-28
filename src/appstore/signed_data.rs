@@ -1,9 +1,9 @@
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
-use p256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 use serde::{Deserialize, Serialize};
-use x509_cert::der::{Decode, Encode};
 use x509_cert::Certificate;
+use x509_cert::der::{Decode, Encode};
 
 use crate::error::AppleError;
 

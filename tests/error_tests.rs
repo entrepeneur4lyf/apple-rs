@@ -226,10 +226,4 @@ mod cloudkit_error_tests {
         assert!(s.contains("THROTTLED"));
         assert!(s.contains("rate limited"));
     }
-
-    #[test]
-    fn test_apple_error_signature_variant_display() {
-        let err = AppleError::SignatureError("bad sig".into());
-        assert_eq!(err.to_string(), "Signature error: bad sig");
-    }
 }

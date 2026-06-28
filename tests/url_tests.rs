@@ -39,13 +39,17 @@ mod auth_url_tests {
         };
 
         let result = authorize_url(cfg);
-        assert!(result
-            .url
-            .starts_with("https://appleid.apple.com/auth/authorize?"));
+        assert!(
+            result
+                .url
+                .starts_with("https://appleid.apple.com/auth/authorize?")
+        );
         assert!(result.url.contains("client_id=com.example.app"));
-        assert!(result
-            .url
-            .contains("redirect_uri=https%3A%2F%2Fexample.com%2Fcallback"));
+        assert!(
+            result
+                .url
+                .contains("redirect_uri=https%3A%2F%2Fexample.com%2Fcallback")
+        );
         assert!(result.url.contains("response_type=code+id_token"));
         assert!(result.url.contains("response_mode=form_post"));
         assert!(!result.state.is_empty());

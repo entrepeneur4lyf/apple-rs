@@ -77,12 +77,11 @@ impl AppStoreServerClient {
             .as_secs() as i64;
 
         // Check cache — regenerate if within 5 min of expiry
-        if let Ok(cache) = self.token_cache.lock() {
-            if let Some(cached) = cache.as_ref() {
-                if cached.expires_at > now + APPSTORE_JWT_REFRESH_THRESHOLD_SECS {
-                    return Ok(cached.token.clone());
-                }
-            }
+        if let Ok(cache) = self.token_cache.lock()
+            && let Some(cached) = cache.as_ref()
+            && cached.expires_at > now + APPSTORE_JWT_REFRESH_THRESHOLD_SECS
+        {
+            return Ok(cached.token.clone());
         }
 
         let claims = AppStoreClaims {

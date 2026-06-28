@@ -1,6 +1,6 @@
 use crate::error::AppleError;
 use crate::user::Claims;
-use jsonwebtoken::{DecodingKey, Validation, decode, Algorithm};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::RwLock;
@@ -114,10 +114,10 @@ impl AppleJwksClient {
                 .cache
                 .read()
                 .map_err(|e| AppleError::JwksError(format!("cache lock poisoned: {e}")))?;
-            if !self.cache_is_stale() {
-                if let Some(jwk) = cache.keys.iter().find(|k| k.kid == kid) {
-                    return Ok(jwk.clone());
-                }
+            if !self.cache_is_stale()
+                && let Some(jwk) = cache.keys.iter().find(|k| k.kid == kid)
+            {
+                return Ok(jwk.clone());
             }
         }
 
@@ -162,8 +162,9 @@ impl AppleJwksClient {
 
         // Convert JWK x/y coordinates to a decoding key for verification
         // from_ec_components takes base64url-encoded strings directly
-        let decoding_key = DecodingKey::from_ec_components(&jwk.x, &jwk.y)
-            .map_err(|e| AppleError::JwksError(format!("failed to build decoding key from JWK: {e}")))?;
+        let decoding_key = DecodingKey::from_ec_components(&jwk.x, &jwk.y).map_err(|e| {
+            AppleError::JwksError(format!("failed to build decoding key from JWK: {e}"))
+        })?;
 
         // Configure validation
         let mut validation = Validation::new(Algorithm::ES256);
@@ -171,20 +172,18 @@ impl AppleJwksClient {
         validation.set_audience(&[expected_audience]);
         validation.validate_exp = true;
 
-        let token_data = decode::<Claims>(token, &decoding_key, &validation)
-            .map_err(|e| AppleError::TokenValidationError(format!("JWT verification failed: {e}")))?;
+        let token_data = decode::<Claims>(token, &decoding_key, &validation).map_err(|e| {
+            AppleError::TokenValidationError(format!("JWT verification failed: {e}"))
+        })?;
 
         // Verify nonce if provided
         if let Some(expected) = expected_nonce {
-            let actual = token_data
-                .claims
-                .nonce
-                .as_deref()
-                .ok_or_else(|| AppleError::TokenValidationError("nonce missing in token".into()))?;
+            let actual =
+                token_data.claims.nonce.as_deref().ok_or_else(|| {
+                    AppleError::TokenValidationError("nonce missing in token".into())
+                })?;
             if actual != expected {
-                return Err(AppleError::TokenValidationError(
-                    "nonce mismatch".into(),
-                ));
+                return Err(AppleError::TokenValidationError("nonce mismatch".into()));
             }
         }
 

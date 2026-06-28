@@ -2,15 +2,14 @@
 
 use apple::appstore::signed_data::SignedDataVerifier;
 use apple::appstore::types::AppStoreEnvironment;
-use apple::error::AppleError;
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 
 #[test]
 fn test_reject_empty_x5c() {
     let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"ES256","x5c":[]}"#);
     let payload = URL_SAFE_NO_PAD.encode(r#"{"bundleId":"com.test","environment":"Production"}"#);
-    let signature = URL_SAFE_NO_PAD.encode(&[0u8; 64]);
+    let signature = URL_SAFE_NO_PAD.encode([0u8; 64].as_slice());
 
     let jws = format!("{header}.{payload}.{signature}");
 
@@ -29,7 +28,7 @@ fn test_reject_chain_too_short() {
 
     let header = URL_SAFE_NO_PAD.encode(format!(r#"{{"alg":"ES256","x5c":["{leaf_b64}"]}}"#));
     let payload = URL_SAFE_NO_PAD.encode(r#"{"bundleId":"com.test","environment":"Production"}"#);
-    let signature = URL_SAFE_NO_PAD.encode(&[0u8; 64]);
+    let signature = URL_SAFE_NO_PAD.encode([0u8; 64].as_slice());
 
     let jws = format!("{header}.{payload}.{signature}");
     let verifier =
@@ -54,7 +53,7 @@ fn test_reject_untrusted_root() {
         r#"{{"alg":"ES256","x5c":["{leaf_b64}","{intermediate_b64}","{root_b64}"]}}"#
     ));
     let payload = URL_SAFE_NO_PAD.encode(r#"{"bundleId":"com.test","environment":"Production"}"#);
-    let signature = URL_SAFE_NO_PAD.encode(&[0u8; 64]);
+    let signature = URL_SAFE_NO_PAD.encode([0u8; 64].as_slice());
 
     let jws = format!("{header}.{payload}.{signature}");
     let result = verifier.verify_and_decode_transaction(&jws);

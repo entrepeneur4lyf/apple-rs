@@ -117,12 +117,11 @@ impl AppleAuthImpl {
             .as_secs() as i64;
 
         // Check cache — regenerate if within 1 hour of expiry
-        if let Ok(cache) = self.client_secret_cache.lock() {
-            if let Some(cached) = cache.as_ref() {
-                if cached.expires_at > now + 3600 {
-                    return Ok(cached.token.clone());
-                }
-            }
+        if let Ok(cache) = self.client_secret_cache.lock()
+            && let Some(cached) = cache.as_ref()
+            && cached.expires_at > now + 3600
+        {
+            return Ok(cached.token.clone());
         }
 
         let claims = Claims {

@@ -209,8 +209,6 @@ impl fmt::Display for AppleError {
             AppleError::ResponseError(err) => write!(f, "{}", err),
             #[cfg(feature = "cloudkit")]
             AppleError::CloudKitError(err) => write!(f, "{}", err),
-            #[cfg(feature = "cloudkit")]
-            AppleError::SignatureError(msg) => write!(f, "Signature error: {}", msg),
             #[cfg(feature = "appstore")]
             AppleError::AppStoreError(err) => write!(f, "{}", err),
             #[cfg(feature = "appstore")]

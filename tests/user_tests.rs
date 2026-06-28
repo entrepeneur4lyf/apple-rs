@@ -10,16 +10,15 @@ async fn test_forged_token_is_rejected() {
     let jwks_client = AppleJwksClient::new().unwrap();
 
     // Create a JWT signed with a test key (not Apple's real key)
+    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
     use p256::ecdsa::SigningKey;
-    use jsonwebtoken::{EncodingKey, Header, encode, Algorithm};
     use p256::pkcs8::EncodePrivateKey;
 
     // Deterministic test key — not in Apple's JWKS
     let test_key_bytes: [u8; 32] = [
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+        0x1f, 0x20,
     ];
     let signing_key = SigningKey::from_slice(&test_key_bytes).unwrap();
     let der = signing_key.to_pkcs8_der().unwrap();
@@ -40,13 +39,9 @@ async fn test_forged_token_is_rejected() {
     header.kid = Some("FAKEKID".to_string());
     let forged_token = encode(&header, &claims, &EncodingKey::from_ec_der(der.as_bytes())).unwrap();
 
-    let result = apple::user::get_user_info_from_id_token(
-        &forged_token,
-        "com.test.app",
-        None,
-        &jwks_client,
-    )
-    .await;
+    let result =
+        apple::user::get_user_info_from_id_token(&forged_token, "com.test.app", None, &jwks_client)
+            .await;
 
     assert!(result.is_err(), "forged token must be rejected");
     match result.unwrap_err() {
@@ -63,8 +58,12 @@ async fn test_forged_token_is_rejected() {
 #[test]
 fn test_parse_bool_from_string() {
     // Apple serializes email_verified as a string "true"/"false", not a bool.
-    assert!(parse_bool(&Some(serde_json::Value::String("true".to_string()))));
-    assert!(!parse_bool(&Some(serde_json::Value::String("false".to_string()))));
+    assert!(parse_bool(&Some(serde_json::Value::String(
+        "true".to_string()
+    ))));
+    assert!(!parse_bool(&Some(serde_json::Value::String(
+        "false".to_string()
+    ))));
     assert!(parse_bool(&Some(serde_json::Value::Bool(true))));
     assert!(!parse_bool(&Some(serde_json::Value::Bool(false))));
     assert!(!parse_bool(&None));

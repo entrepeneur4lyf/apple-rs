@@ -91,10 +91,9 @@ impl CloudKitClient {
     }
 
     pub(crate) fn extract_subpath(url: &str) -> Result<&str, AppleError> {
-        url.strip_prefix(CLOUDKIT_BASE_URL)
-            .ok_or_else(|| AppleError::HttpError(format!(
-                "URL does not start with CloudKit base URL: {url}"
-            )))
+        url.strip_prefix(CLOUDKIT_BASE_URL).ok_or_else(|| {
+            AppleError::HttpError(format!("URL does not start with CloudKit base URL: {url}"))
+        })
     }
 
     pub(crate) async fn signed_post<Req: Serialize, Res: DeserializeOwned>(
