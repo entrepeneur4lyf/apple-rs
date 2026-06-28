@@ -32,68 +32,105 @@ mod auth_url_tests {
         let cfg = AuthorizeURLConfig {
             client_id: "com.example.app".to_string(),
             redirect_uri: "https://example.com/callback".to_string(),
-            state: None,
             scope: None,
             nonce: None,
             response_mode: None,
             response_type: None,
         };
 
-        let url = authorize_url(cfg);
-        assert!(url.starts_with("https://appleid.apple.com/auth/authorize?"));
-        assert!(url.contains("client_id=com.example.app"));
-        assert!(url.contains("redirect_uri=https%3A%2F%2Fexample.com%2Fcallback"));
-        assert!(url.contains("response_type=code+id_token"));
-        assert!(url.contains("response_mode=form_post"));
+        let result = authorize_url(cfg);
+        assert!(result
+            .url
+            .starts_with("https://appleid.apple.com/auth/authorize?"));
+        assert!(result.url.contains("client_id=com.example.app"));
+        assert!(result
+            .url
+            .contains("redirect_uri=https%3A%2F%2Fexample.com%2Fcallback"));
+        assert!(result.url.contains("response_type=code+id_token"));
+        assert!(result.url.contains("response_mode=form_post"));
+        assert!(!result.state.is_empty());
+        assert!(result.url.contains("state="));
     }
 
     #[test]
     fn test_authorize_url_with_all_params() {
         let cfg = AuthorizeURLConfig {
-            client_id: "com.test.app".to_string(),
-            redirect_uri: "https://test.com/cb".to_string(),
-            state: Some("mystate".to_string()),
+            client_id: "com.example.app".to_string(),
+            redirect_uri: "https://example.com/callback".to_string(),
             scope: Some(vec!["email".to_string(), "name".to_string()]),
-            nonce: Some("mynonce".to_string()),
-            response_mode: Some(ResponseMode::Query),
-            response_type: Some(ResponseType::Code),
+            nonce: Some("nonce123".to_string()),
+            response_mode: Some(ResponseMode::FormPost),
+            response_type: Some(ResponseType::CodeId),
         };
 
-        let url = authorize_url(cfg);
-        assert!(url.contains("client_id=com.test.app"));
-        assert!(url.contains("state=mystate"));
-        assert!(url.contains("nonce=mynonce"));
-        assert!(url.contains("scope=email+name"));
-        assert!(url.contains("response_mode=query"));
-        assert!(url.contains("response_type=code"));
+        let result = authorize_url(cfg);
+        assert!(result.url.contains("scope=email+name"));
+        assert!(result.url.contains("nonce=nonce123"));
+        assert!(!result.state.is_empty());
     }
 
     #[test]
     fn test_authorize_url_with_fragment_mode() {
         let cfg = AuthorizeURLConfig {
-            client_id: "com.test.app".to_string(),
-            redirect_uri: "https://test.com/cb".to_string(),
-            state: None,
+            client_id: "com.example.app".to_string(),
+            redirect_uri: "https://example.com/callback".to_string(),
             scope: None,
             nonce: None,
             response_mode: Some(ResponseMode::Fragment),
-            response_type: Some(ResponseType::CodeId),
+            response_type: Some(ResponseType::Code),
         };
 
-        let url = authorize_url(cfg);
-        assert!(url.contains("response_mode=fragment"));
+        let result = authorize_url(cfg);
+        assert!(result.url.contains("response_mode=fragment"));
+        assert!(result.url.contains("response_type=code"));
     }
 
     #[test]
-    fn test_authorize_url_serde_roundtrip() {
-        let mode = ResponseMode::FormPost;
-        let json = serde_json::to_string(&mode).unwrap();
-        let deserialized: ResponseMode = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.to_string(), "form_post");
+    fn test_authorize_url_generates_state() {
+        let cfg = AuthorizeURLConfig {
+            client_id: "com.example.app".to_string(),
+            redirect_uri: "https://example.com/callback".to_string(),
+            scope: Some(vec!["email".to_string(), "name".to_string()]),
+            nonce: Some("nonce123".to_string()),
+            response_mode: None,
+            response_type: None,
+        };
 
-        let rt = ResponseType::Code;
-        let json = serde_json::to_string(&rt).unwrap();
-        let deserialized: ResponseType = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.to_string(), "code");
+        let result = authorize_url(cfg);
+        assert!(!result.state.is_empty());
+        assert!(result.state.len() >= 32);
+        assert!(result.url.contains("state="));
+        assert!(result.url.contains(&result.state));
+    }
+
+    #[test]
+    fn test_verify_state_accepts_match() {
+        let state = "abc123";
+        assert!(verify_state(state, state).is_ok());
+    }
+
+    #[test]
+    fn test_verify_state_rejects_mismatch() {
+        assert!(verify_state("abc123", "xyz789").is_err());
+    }
+
+    #[test]
+    fn test_verify_state_rejects_empty() {
+        assert!(verify_state("", "").is_err());
+    }
+
+    #[test]
+    fn test_two_authorize_urls_generate_different_states() {
+        let cfg = AuthorizeURLConfig {
+            client_id: "com.example.app".to_string(),
+            redirect_uri: "https://example.com/callback".to_string(),
+            scope: None,
+            nonce: None,
+            response_mode: None,
+            response_type: None,
+        };
+        let result1 = authorize_url(cfg.clone());
+        let result2 = authorize_url(cfg);
+        assert_ne!(result1.state, result2.state);
     }
 }

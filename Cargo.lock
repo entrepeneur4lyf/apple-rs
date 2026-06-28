@@ -36,6 +36,7 @@ dependencies = [
  "jsonwebtoken",
  "p256",
  "pem",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",
