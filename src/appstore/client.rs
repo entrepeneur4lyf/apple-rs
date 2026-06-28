@@ -5,7 +5,7 @@ use p256::pkcs8::EncodePrivateKey;
 use reqwest::Client;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::error::parse_appstore_error;
@@ -24,6 +24,15 @@ pub struct AppStoreConfig {
 pub struct AppStoreServerClient {
     config: AppStoreConfig,
     http_client: Client,
+    token_cache: Mutex<Option<CachedJwt>>,
+}
+
+const APPSTORE_JWT_EXPIRY_SECS: i64 = 3600; // 1 hour
+const APPSTORE_JWT_REFRESH_THRESHOLD_SECS: i64 = 300; // refresh within 5 min of expiry
+
+struct CachedJwt {
+    token: String,
+    expires_at: i64,
 }
 
 #[derive(Serialize)]
@@ -46,6 +55,7 @@ impl AppStoreServerClient {
         Ok(AppStoreServerClient {
             config,
             http_client,
+            token_cache: Mutex::new(None),
         })
     }
 
@@ -64,12 +74,21 @@ impl AppStoreServerClient {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|e| AppleError::TimeError(e.to_string()))?
-            .as_secs();
+            .as_secs() as i64;
+
+        // Check cache — regenerate if within 5 min of expiry
+        if let Ok(cache) = self.token_cache.lock() {
+            if let Some(cached) = cache.as_ref() {
+                if cached.expires_at > now + APPSTORE_JWT_REFRESH_THRESHOLD_SECS {
+                    return Ok(cached.token.clone());
+                }
+            }
+        }
 
         let claims = AppStoreClaims {
             iss: self.config.issuer_id.clone(),
-            iat: now as i64,
-            exp: now as i64 + 3600, // 1 hour max
+            iat: now,
+            exp: now + APPSTORE_JWT_EXPIRY_SECS,
             aud: "appstoreconnect-v1".to_string(),
             bid: self.config.bundle_id.clone(),
         };
@@ -86,6 +105,14 @@ impl AppStoreServerClient {
 
         let token = encode(&header, &claims, &EncodingKey::from_ec_der(der.as_bytes()))
             .map_err(|e| AppleError::JwtError(e.to_string()))?;
+
+        // Cache it
+        if let Ok(mut cache) = self.token_cache.lock() {
+            *cache = Some(CachedJwt {
+                token: token.clone(),
+                expires_at: now + APPSTORE_JWT_EXPIRY_SECS,
+            });
+        }
 
         Ok(token)
     }
