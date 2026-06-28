@@ -53,6 +53,7 @@ impl AppleAuthImpl {
             key_pair,
             http_client: Client::builder()
                 .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| AppleError::HttpError(e.to_string()))?,
         })
@@ -71,6 +72,7 @@ impl AppleAuthImpl {
             key_pair,
             http_client: Client::builder()
                 .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| AppleError::HttpError(e.to_string()))?,
         })
@@ -87,6 +89,7 @@ impl AppleAuthImpl {
             key_pair,
             http_client: Client::builder()
                 .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| AppleError::HttpError(e.to_string()))?,
         })

@@ -28,6 +28,7 @@ impl CloudKitClient {
     pub fn new(config: CloudKitConfig) -> Result<Self, AppleError> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| AppleError::HttpError(e.to_string()))?;
 
