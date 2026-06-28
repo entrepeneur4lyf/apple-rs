@@ -90,8 +90,11 @@ impl CloudKitClient {
         ])
     }
 
-    pub(crate) fn extract_subpath(url: &str) -> &str {
-        url.strip_prefix(CLOUDKIT_BASE_URL).unwrap_or(url)
+    pub(crate) fn extract_subpath(url: &str) -> Result<&str, AppleError> {
+        url.strip_prefix(CLOUDKIT_BASE_URL)
+            .ok_or_else(|| AppleError::HttpError(format!(
+                "URL does not start with CloudKit base URL: {url}"
+            )))
     }
 
     pub(crate) async fn signed_post<Req: Serialize, Res: DeserializeOwned>(
@@ -102,7 +105,7 @@ impl CloudKitClient {
         let body_str =
             serde_json::to_string(body).map_err(|e| AppleError::JsonError(e.to_string()))?;
 
-        let subpath = Self::extract_subpath(url);
+        let subpath = Self::extract_subpath(url)?;
         let headers = self.sign_request(&body_str, subpath)?;
 
         let mut request = self
@@ -138,7 +141,7 @@ impl CloudKitClient {
         &self,
         url: &str,
     ) -> Result<Res, AppleError> {
-        let subpath = Self::extract_subpath(url);
+        let subpath = Self::extract_subpath(url)?;
         let headers = self.sign_request("", subpath)?;
 
         let mut request = self.http_client.get(url);
