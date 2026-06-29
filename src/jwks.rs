@@ -18,9 +18,18 @@ pub struct Jwk {
     pub alg: String,
     #[serde(rename = "use")]
     pub use_: String,
-    pub crv: String,
-    pub x: String,
-    pub y: String,
+    // EC params (used by Apple's App Store Server API keys; absent for RSA).
+    #[serde(default)]
+    pub crv: Option<String>,
+    #[serde(default)]
+    pub x: Option<String>,
+    #[serde(default)]
+    pub y: Option<String>,
+    // RSA params (used by Sign in with Apple id_token keys; absent for EC).
+    #[serde(default)]
+    pub n: Option<String>,
+    #[serde(default)]
+    pub e: Option<String>,
 }
 
 /// JWKS response from Apple.
@@ -160,14 +169,47 @@ impl AppleJwksClient {
         // Get the matching JWK
         let jwk = self.get_key(&kid).await?;
 
-        // Convert JWK x/y coordinates to a decoding key for verification
-        // from_ec_components takes base64url-encoded strings directly
-        let decoding_key = DecodingKey::from_ec_components(&jwk.x, &jwk.y).map_err(|e| {
-            AppleError::JwksError(format!("failed to build decoding key from JWK: {e}"))
-        })?;
+        // Build a decoding key for the JWK's key type. Sign in with Apple
+        // id_tokens are RS256 (RSA n/e); the App Store Server API uses
+        // ES256 (EC x/y). Pick the algorithm from `kty` so both verify.
+        let (decoding_key, algorithm) = match jwk.kty.as_str() {
+            "RSA" => {
+                let n = jwk
+                    .n
+                    .as_deref()
+                    .ok_or_else(|| AppleError::JwksError("RSA JWK missing 'n' component".into()))?;
+                let e = jwk
+                    .e
+                    .as_deref()
+                    .ok_or_else(|| AppleError::JwksError("RSA JWK missing 'e' component".into()))?;
+                let key = DecodingKey::from_rsa_components(n, e).map_err(|e| {
+                    AppleError::JwksError(format!("failed to build RSA decoding key from JWK: {e}"))
+                })?;
+                (key, Algorithm::RS256)
+            }
+            "EC" => {
+                let x = jwk
+                    .x
+                    .as_deref()
+                    .ok_or_else(|| AppleError::JwksError("EC JWK missing 'x' component".into()))?;
+                let y = jwk
+                    .y
+                    .as_deref()
+                    .ok_or_else(|| AppleError::JwksError("EC JWK missing 'y' component".into()))?;
+                let key = DecodingKey::from_ec_components(x, y).map_err(|e| {
+                    AppleError::JwksError(format!("failed to build EC decoding key from JWK: {e}"))
+                })?;
+                (key, Algorithm::ES256)
+            }
+            other => {
+                return Err(AppleError::JwksError(format!(
+                    "unsupported JWK key type '{other}'"
+                )));
+            }
+        };
 
         // Configure validation
-        let mut validation = Validation::new(Algorithm::ES256);
+        let mut validation = Validation::new(algorithm);
         validation.set_issuer(&[APPLE_ISSUER]);
         validation.set_audience(&[expected_audience]);
         validation.validate_exp = true;
